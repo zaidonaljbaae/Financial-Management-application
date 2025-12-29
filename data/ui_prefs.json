@@ -1,0 +1,9 @@
+{
+  "theme": "light",
+  "accent": "#2a6fe3",
+  "topbar_bg": "#121826",
+  "topbar_fg": "#e6e6e6",
+  "pos_amount_color": "#2a6fe3",
+  "neg_amount_color": "#ff4d4d",
+  "category_colors": {}
+}
