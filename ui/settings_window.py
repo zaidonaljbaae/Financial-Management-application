@@ -3,14 +3,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox, colorchooser
 
-from finance.prefs import DEFAULT_PREFS, save_prefs
-from finance.security import (
+from core.prefs import DEFAULT_PREFS, save_prefs
+from core.security import (
     load_security,
     save_security,
     set_passwords,
     wipe_all_user_data,
 )
-from finance.db import db_init
+from core.db import db_init
 
 
 class SettingsWindow(tk.Toplevel):
@@ -32,13 +32,16 @@ class SettingsWindow(tk.Toplevel):
 
         self.tab_appearance = ttk.Frame(self.nb)
         self.tab_colors = ttk.Frame(self.nb)
+        self.tab_lists = ttk.Frame(self.nb)
         self.tab_security = ttk.Frame(self.nb)
         self.nb.add(self.tab_appearance, text="Appearance")
         self.nb.add(self.tab_colors, text="Colors")
+        self.nb.add(self.tab_lists, text="Lists")
         self.nb.add(self.tab_security, text="Security")
 
         self._build_appearance()
         self._build_colors()
+        self._build_lists()
         self._build_security()
 
         actions = ttk.Frame(root)
@@ -214,6 +217,103 @@ class SettingsWindow(tk.Toplevel):
         save_prefs(self.app.prefs)
         self.app.apply_theme(self.app.prefs.get("theme", "dark"))
         self.app.refresh_all()
+
+    # ---------------- Lists ----------------
+    def _build_lists(self):
+        frm = self.tab_lists
+        frm.columnconfigure(1, weight=1)
+
+        ttk.Label(frm, text="Sources", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ttk.Label(frm, text="Used in Transactions → Source (supermarket, bakery, ...). You can type a new source there and it will be added automatically.").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(0, 10)
+        )
+
+        self.src_list = tk.Listbox(frm, height=14)
+        self.src_list.grid(row=2, column=0, sticky="nsew")
+        frm.rowconfigure(2, weight=1)
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=1, sticky="ns", padx=(10, 0))
+        ttk.Button(btns, text="Add", command=self._src_add).pack(fill="x", pady=(0, 6))
+        ttk.Button(btns, text="Edit", command=self._src_edit).pack(fill="x", pady=(0, 6))
+        ttk.Button(btns, text="Remove", command=self._src_remove).pack(fill="x")
+
+        ttk.Button(frm, text="Save Sources", style="Accent.TButton", command=self._src_save).grid(row=3, column=1, sticky="e", pady=(12, 0))
+
+        self._src_reload()
+
+    def _src_reload(self):
+        self.src_list.delete(0, tk.END)
+        for s in (self.app.prefs.get("sources", []) or []):
+            self.src_list.insert(tk.END, s)
+
+    def _src_selected_index(self):
+        sel = self.src_list.curselection()
+        return sel[0] if sel else None
+
+    def _src_add(self):
+        self._src_editor(None)
+
+    def _src_edit(self):
+        idx = self._src_selected_index()
+        if idx is None:
+            messagebox.showinfo("Sources", "Select a source first.")
+            return
+        self._src_editor((idx, self.src_list.get(idx)))
+
+    def _src_remove(self):
+        idx = self._src_selected_index()
+        if idx is None:
+            messagebox.showinfo("Sources", "Select a source first.")
+            return
+        self.src_list.delete(idx)
+
+    def _src_editor(self, existing):
+        win = tk.Toplevel(self)
+        win.title("Source")
+        win.transient(self)
+        win.grab_set()
+        win.geometry("420x180")
+
+        frm = ttk.Frame(win, padding=16)
+        frm.pack(fill="both", expand=True)
+        frm.columnconfigure(1, weight=1)
+
+        val = existing[1] if existing else ""
+        src_var = tk.StringVar(value=val)
+
+        ttk.Label(frm, text="Source name").grid(row=0, column=0, sticky="w", pady=8)
+        ttk.Entry(frm, textvariable=src_var).grid(row=0, column=1, sticky="ew", pady=8)
+
+        def save_one():
+            s = src_var.get().strip()
+            if not s:
+                messagebox.showerror("Source", "Source name is required.")
+                return
+            if existing:
+                idx, _old = existing
+                self.src_list.delete(idx)
+                self.src_list.insert(idx, s)
+            else:
+                self.src_list.insert(tk.END, s)
+            win.destroy()
+
+        actions = ttk.Frame(frm)
+        actions.grid(row=10, column=0, columnspan=2, sticky="e", pady=(16, 0))
+        ttk.Button(actions, text="Cancel", command=win.destroy).pack(side="right")
+        ttk.Button(actions, text="Save", style="Accent.TButton", command=save_one).pack(side="right", padx=8)
+
+    def _src_save(self):
+        vals = []
+        for i in range(self.src_list.size()):
+            v = self.src_list.get(i).strip()
+            if v and v not in vals:
+                vals.append(v)
+        if not vals:
+            vals = DEFAULT_PREFS.get("sources", [])
+        self.app.prefs["sources"] = vals
+        save_prefs(self.app.prefs)
+        messagebox.showinfo("Sources", "Saved.")
 
     # ---------------- Security ----------------
     def _build_security(self):

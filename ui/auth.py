@@ -3,7 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from finance.security import (
+from core.security import (
     SecurityState,
     is_initialized,
     load_security,
@@ -12,7 +12,7 @@ from finance.security import (
     verify_program_password,
     wipe_all_user_data,
 )
-from finance.db import db_init
+from core.db import db_init
 
 
 def authenticate_or_setup(root: tk.Tk) -> bool:

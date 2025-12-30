@@ -16,23 +16,24 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
-from finance.db import (
+from core.db import (
     db_init,
+    auto_settle_credit_cards,
     fetch_accounts,
     fetch_transactions,
     calc_balance,
     insert_transaction,
 )
-from finance.prefs import load_prefs, save_prefs
+from core.prefs import load_prefs, save_prefs
 
 from .settings_window import SettingsWindow
-from .pages import dashboard, accounts, transactions
+from .pages import dashboard, accounts, transactions, charts
 
 
 class MoneyManagerApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Money Manager")
+        self.title("Money Manager (created by zaidon aljbaae)")
         self._set_initial_geometry()
         self.minsize(980, 620)
 
@@ -43,6 +44,12 @@ class MoneyManagerApp(tk.Tk):
             pass
 
         db_init()
+        # Auto-settle credit cards if today is their statement day
+        try:
+            auto_settle_credit_cards(date.today().isoformat())
+        except Exception:
+            pass
+
 
         self.prefs = load_prefs()
         self._cat_tags = set()
@@ -57,6 +64,7 @@ class MoneyManagerApp(tk.Tk):
 
         self.refresh_all()
 
+        
     # --------- global state ---------
     def _load_colors_from_prefs(self):
         self.accent = self.prefs.get("accent", "#2a6fe3")
@@ -103,12 +111,22 @@ class MoneyManagerApp(tk.Tk):
 
         self.config(menu=menubar)
 
-    def _build_topbar(self):
-        # user request: no buttons in top bar, only logo + title
-        self.topbar = ttk.Frame(self, style="Topbar.TFrame", padding=(16, 14))
-        self.topbar.pack(side="top")
 
-        ttk.Label(self.topbar).pack(side="left")
+    def _build_topbar(self):
+        self.topbar = ttk.Frame(self, style="Topbar.TFrame")
+        self.topbar.pack(side="top", fill="x")
+        self.topbar.pack_propagate(False)
+        self.topbar.configure(height=90)
+
+        inner = ttk.Frame(self.topbar, style="Topbar.TFrame", padding=(24, 20))
+        inner.pack(fill="both", expand=True)
+
+        ttk.Label(
+            inner,
+            text="Money Manager",
+            style="TopbarTitle.TLabel",
+        ).pack(side="left")
+
 
     def _build_notebook(self):
         self.notebook = ttk.Notebook(self, style="App.TNotebook")
@@ -117,14 +135,17 @@ class MoneyManagerApp(tk.Tk):
         self.tab_dashboard = ttk.Frame(self.notebook)
         self.tab_accounts = ttk.Frame(self.notebook)
         self.tab_transactions = ttk.Frame(self.notebook)
+        self.tab_charts = ttk.Frame(self.notebook)
 
         self.notebook.add(self.tab_dashboard, text="Dashboard")
         self.notebook.add(self.tab_accounts, text="Accounts")
         self.notebook.add(self.tab_transactions, text="Transactions")
+        self.notebook.add(self.tab_charts, text="Charts")
 
         dashboard.build(self, self.tab_dashboard)
         accounts.build(self, self.tab_accounts)
         transactions.build(self, self.tab_transactions)
+        charts.build(self, self.tab_charts)
 
     def _build_footer(self):
         self._footer = ttk.Label(self, text="Created by Zaidon", style="Footer.TLabel", anchor="e")
@@ -137,6 +158,10 @@ class MoneyManagerApp(tk.Tk):
         dashboard.refresh(self)
         accounts.refresh(self)
         transactions.refresh(self)
+        try:
+            charts.refresh(self)
+        except Exception:
+            pass
 
     def _account_display(self, arow):
         aid, name, atype, parent_id, currency, initbal, is_active = arow
@@ -153,18 +178,19 @@ class MoneyManagerApp(tk.Tk):
 
         if self.theme == "dark":
             palette = {
-                "bg": "#1e1e1e",
-                "fg": "#e6e6e6",
-                "muted": "#b8b8b8",
-                "panel": "#252526",
-                "border": "#3a3a3a",
-                "tab_sel": "#151515",
-                "tab_unsel": "#252526",
-                "tree_bg": "#1f1f1f",
-                "tree_fg": "#e6e6e6",
-                "tree_sel": "#3d3d3d",
+                # modern dark palette
+                "bg": "#0b1220",
+                "fg": "#e6e9ef",
+                "muted": "#a7b0c0",
+                "panel": "#111a2e",
+                "border": "#27324a",
+                "tab_sel": "#0f1b33",
+                "tab_unsel": "#111a2e",
+                "tree_bg": "#0f172a",
+                "tree_fg": "#e6e9ef",
+                "tree_sel": "#1f2a44",
             }
-            card_colors = ["#2b4c7e", "#275d38", "#7a4a1b", "#6b2d5c"]
+            card_colors = ["#0f1b33", "#0f2a22", "#2a1f12", "#2a1830"]
         else:
             palette = {
                 "bg": "#f5f6f8",
@@ -180,8 +206,8 @@ class MoneyManagerApp(tk.Tk):
             }
             card_colors = ["#e9f2ff", "#e8f7ee", "#fff3e5", "#f7e9f5"]
 
-        self._palette = palette
         try:
+            self.palette = palette
             self.configure(bg=palette["bg"])
         except Exception:
             pass
@@ -197,21 +223,26 @@ class MoneyManagerApp(tk.Tk):
 
         # Tabs: selected is darker, size is consistent
         s.configure("App.TNotebook", background=palette["bg"], borderwidth=0)
+
+        # Normal (unselected) tabs
         s.configure(
             "App.TNotebook.Tab",
             padding=(16, 10),
             background=palette["tab_unsel"],
-            foreground=palette["fg"],
+            foreground=palette["muted"],
+            font=("Segoe UI", 11),
         )
+
+        # Selected tab = BIGGER
         s.map(
             "App.TNotebook.Tab",
             background=[("selected", palette["tab_sel"])],
             foreground=[("selected", palette["fg"])],
+            padding=[("selected", (24, 16))],   # <<< BIGGER TAB
+            font=[("selected", ("Segoe UI", 12, "bold"))],
         )
 
-        s.configure(
-            "Topbar.TFrame"
-        )
+        s.configure("Topbar.TFrame", background=self.topbar_bg)
         s.configure("Topbar.TLabel", background=self.topbar_bg, foreground=self.topbar_fg)
         s.configure(
             "TopbarTitle.TLabel",
@@ -339,3 +370,5 @@ class MoneyManagerApp(tk.Tk):
 def run_app():
     app = MoneyManagerApp()
     app.mainloop()
+
+    
