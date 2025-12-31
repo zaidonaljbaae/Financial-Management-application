@@ -268,6 +268,11 @@ def _open_add(app):
         win.destroy()
         app.refresh_all()
 
+    # Enter acts like "Save"
+    win.bind("<Return>", lambda _e: save())
+    win.bind("<KP_Enter>", lambda _e: save())
+    win.bind("<Escape>", lambda _e: win.destroy())
+
     actions = ttk.Frame(frm)
     actions.grid(row=10, column=0, columnspan=2, sticky="e", pady=(16, 0))
     ttk.Button(actions, text="Cancel", command=win.destroy).pack(side="right")

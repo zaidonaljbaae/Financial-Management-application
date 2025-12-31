@@ -8,11 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
 
-from core.db import DB_PATH
-from core.prefs import PREFS_PATH
+from core.app_paths import user_data_dir
+from core.db import get_db_path
+from core.prefs import get_prefs_path
+from core.session import get_current_user
 
 
-SEC_PATH = Path(__file__).resolve().parents[1] / "data" / "security.json"
+SEC_PATH = user_data_dir() / "security.json"
 
 
 def _pbkdf2(password: str, salt: bytes, *, rounds: int = 200_000) -> bytes:
@@ -112,7 +114,8 @@ def verify_db_password(st: SecurityState, password: str) -> bool:
 
 def wipe_all_user_data() -> None:
     """Delete the DB + UI prefs + security file (resets the application)."""
-    for p in [DB_PATH, PREFS_PATH, SEC_PATH]:
+    uname = get_current_user() or "default"
+    for p in [get_db_path(uname), get_prefs_path(uname), SEC_PATH]:
         try:
             if p.exists():
                 p.unlink()

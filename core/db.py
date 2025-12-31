@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 
+from core.app_paths import bundled_data_dir, user_data_dir
+from core.session import get_current_user
 
-DB_PATH = Path(__file__).resolve().parents[1] / "data" / "finance.db"
+
+def get_db_path(username: str | None = None) -> Path:
+    """Per-user database path (writable)."""
+    uname = (username or get_current_user() or "default").strip().lower()
+    return user_data_dir() / f"finance_{uname}.db"
 
 
 def db_connect(db_path: Path | None = None) -> sqlite3.Connection:
     """Open a sqlite connection (foreign keys ON)."""
-    path = db_path or DB_PATH
+    path = db_path or get_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path)
     con.execute("PRAGMA foreign_keys = ON;")
@@ -18,6 +25,7 @@ def db_connect(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def db_init() -> None:
+    # Ensure per-user DB exists and has schema.
     con = db_connect()
     cur = con.cursor()
     cur.execute(
@@ -67,6 +75,27 @@ def db_init() -> None:
     con.commit()
 
     con.close()
+
+
+def ensure_db_present() -> None:
+    """Create a new per-user DB if missing.
+
+    When packaged, the bundled ./data/finance.db is read-only and lives in a
+    temp folder. We always write to the user data directory.
+    """
+    path = get_db_path()
+    if path.exists():
+        return
+    # If a bundled template DB exists, try to copy it as a starting point.
+    try:
+        template = bundled_data_dir() / "finance.db"
+        if template.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(template.read_bytes())
+    except Exception:
+        pass
+    # Always enforce schema.
+    db_init()
 
 
 def fetch_accounts(*, include_inactive: bool = False):

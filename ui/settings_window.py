@@ -4,13 +4,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, colorchooser
 
 from core.prefs import DEFAULT_PREFS, save_prefs
-from core.security import (
-    load_security,
-    save_security,
-    set_passwords,
-    wipe_all_user_data,
-)
-from core.db import db_init
+from core.db import db_init, get_db_path
+from core.prefs import get_prefs_path
+from core.session import get_current_user
+from core.users import add_user, set_user_password
 
 
 class SettingsWindow(tk.Toplevel):
@@ -320,38 +317,79 @@ class SettingsWindow(tk.Toplevel):
         frm = self.tab_security
         frm.columnconfigure(1, weight=1)
 
-        ttk.Label(frm, text="Passwords", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
-        ttk.Label(frm, text="Change the program password and the database password.").grid(row=1, column=0, columnspan=2, sticky="w")
+        ttk.Label(frm, text="Users", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 10))
+        ttk.Label(frm, text=f"Current user: {get_current_user()}").grid(row=1, column=0, columnspan=2, sticky="w")
 
-        self.new_prog_var = tk.StringVar()
-        self.new_db_var = tk.StringVar()
-
-        ttk.Label(frm, text="New program password").grid(row=2, column=0, sticky="w", pady=6)
-        ttk.Entry(frm, textvariable=self.new_prog_var, show="•").grid(row=2, column=1, sticky="ew", pady=6)
-
-        ttk.Button(frm, text="Save Passwords", style="Accent.TButton", command=self._save_passwords).grid(row=4, column=1, sticky="e", pady=(10, 0))
+        # ---- Add user ----
+        ttk.Label(frm, text="Add new user", font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="w", pady=(14, 6))
+        self.add_user_var = tk.StringVar()
+        self.add_pw_var = tk.StringVar()
+        ttk.Label(frm, text="Username").grid(row=3, column=0, sticky="w", pady=6)
+        ttk.Entry(frm, textvariable=self.add_user_var).grid(row=3, column=1, sticky="ew", pady=6)
+        ttk.Label(frm, text="Password").grid(row=4, column=0, sticky="w", pady=6)
+        ttk.Entry(frm, textvariable=self.add_pw_var, show="•").grid(row=4, column=1, sticky="ew", pady=6)
+        ttk.Button(frm, text="Create user", style="Accent.TButton", command=self._add_user).grid(row=5, column=1, sticky="e", pady=(6, 0))
 
         ttk.Separator(frm).grid(row=10, column=0, columnspan=2, sticky="ew", pady=16)
 
-        ttk.Label(frm, text="Danger zone", font=("Segoe UI", 12, "bold")).grid(row=11, column=0, sticky="w")
-        ttk.Label(frm, text="This deletes ALL user data (database + UI prefs + passwords) and recreates an empty DB.").grid(row=12, column=0, columnspan=2, sticky="w", pady=(0, 10))
-        ttk.Button(frm, text="Reset all data", command=self._reset_all_data).grid(row=13, column=1, sticky="e")
+        # ---- Change password (current user) ----
+        ttk.Label(frm, text="Change current user's password", font=("Segoe UI", 10, "bold")).grid(row=11, column=0, sticky="w", pady=(0, 6))
+        self.new_pw_var = tk.StringVar()
+        ttk.Label(frm, text="New password").grid(row=12, column=0, sticky="w", pady=6)
+        ttk.Entry(frm, textvariable=self.new_pw_var, show="•").grid(row=12, column=1, sticky="ew", pady=6)
+        ttk.Button(frm, text="Save", style="Accent.TButton", command=self._save_password).grid(row=13, column=1, sticky="e", pady=(6, 0))
 
-    def _save_passwords(self):
-        p = self.new_prog_var.get()
-        d = self.new_db_var.get()
-        if len(p) < 4 or len(d) < 4:
-            messagebox.showerror("Passwords", "Use at least 4 characters for each password.")
-            return
-        set_passwords(p, d)
-        messagebox.showinfo("Passwords", "Passwords updated.")
-        self.new_prog_var.set("")
-        self.new_db_var.set("")
+        ttk.Separator(frm).grid(row=20, column=0, columnspan=2, sticky="ew", pady=16)
 
-    def _reset_all_data(self):
-        if not messagebox.askyesno("Reset", "Delete ALL user data (including transactions) and reset the app?"):
+        # ---- Reset current user data ----
+        ttk.Label(frm, text="Danger zone", font=("Segoe UI", 12, "bold")).grid(row=21, column=0, sticky="w")
+        ttk.Label(frm, text="This deletes ONLY the current user's data (database + UI prefs).", wraplength=520).grid(
+            row=22, column=0, columnspan=2, sticky="w", pady=(0, 10)
+        )
+        ttk.Button(frm, text="Reset current user", command=self._reset_current_user).grid(row=23, column=1, sticky="e")
+
+    def _add_user(self):
+        u = self.add_user_var.get().strip()
+        p = self.add_pw_var.get()
+        if len(u) < 2:
+            messagebox.showerror("Users", "Username must be at least 2 characters.")
             return
-        wipe_all_user_data()
+        if len(p) < 4:
+            messagebox.showerror("Users", "Password must be at least 4 characters.")
+            return
+        try:
+            add_user(u, p)
+            messagebox.showinfo("Users", f"User '{u}' created.")
+            self.add_user_var.set("")
+            self.add_pw_var.set("")
+        except Exception as e:
+            messagebox.showerror("Users", f"Could not create user: {e}")
+
+    def _save_password(self):
+        np = self.new_pw_var.get()
+        if len(np) < 4:
+            messagebox.showerror("Password", "Password must be at least 4 characters.")
+            return
+        try:
+            set_user_password(get_current_user(), np)
+            messagebox.showinfo("Password", "Password updated.")
+            self.new_pw_var.set("")
+        except Exception as e:
+            messagebox.showerror("Password", f"Could not update password: {e}")
+
+    def _reset_current_user(self):
+        if not messagebox.askyesno(
+            "Reset",
+            "Delete the current user's data (including transactions) and recreate an empty database?",
+        ):
+            return
+        # Delete per-user DB + prefs, keep users.json
+        for p in [get_db_path(get_current_user()), get_prefs_path(get_current_user())]:
+            try:
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
         db_init()
-        messagebox.showinfo("Reset", "User data deleted and database recreated.")
+        messagebox.showinfo("Reset", "Current user data deleted and database recreated.")
         self.app.reload_prefs_and_refresh()

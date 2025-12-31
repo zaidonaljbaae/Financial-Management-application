@@ -3,8 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-PREFS_PATH = DATA_DIR / "ui_prefs.json"
+from core.app_paths import user_data_dir
+from core.session import get_current_user
+
+
+def get_prefs_path(username: str | None = None) -> Path:
+    uname = (username or get_current_user() or "default").strip().lower()
+    return user_data_dir() / f"ui_prefs_{uname}.json"
 
 
 DEFAULT_PREFS = {
@@ -32,8 +37,9 @@ DEFAULT_PREFS = {
 
 def load_prefs() -> dict:
     try:
-        if PREFS_PATH.exists():
-            data = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+        p = get_prefs_path()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 merged = dict(DEFAULT_PREFS)
                 merged.update(data)
@@ -49,8 +55,9 @@ def load_prefs() -> dict:
 
 def save_prefs(prefs: dict) -> None:
     try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        PREFS_PATH.write_text(
+        p = get_prefs_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
             json.dumps(prefs, indent=2, ensure_ascii=False), encoding="utf-8"
         )
     except Exception:
